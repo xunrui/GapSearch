@@ -2,11 +2,12 @@
 #include <glpk.h>
 #include <cassert>
 #include <vector>
+#include <unordered_set> 
 #include "gtools.h"
 #define MAXK 30
 #define MAX_N 9
 #define MAXNPATHS  10000
-#define MAXNBITS 20
+#define MAXNBITS 37
 
 int session[MAXK][2];
 int sessionMark[MAX_N];
@@ -34,11 +35,13 @@ void printNetwork()
 	}
 	printf("with sessions:"); 
 	for (int i=0; i<k; i++) printf("%d %d;", session[i][0], session[i][1]);
+	/*
 	for (int m=0; m<k; m++) 
 		for (int i=0; i<paths[m].n; i++) if (paths[m].isShort[i]) {
 			printf("\n %d ", session[m][0]);
 			for (int j=0; j<paths[m].lens[i]; j++) printf(" %d ", paths[m].a[i][j]);
 		}
+	*/
 	printf("\n"); 
 }
 void reset(int *a, int k)
@@ -188,17 +191,17 @@ bool no_merger(sparsegraph * sg)
 }
 int maxNCandidate = 0;
 #include "checkFeasibility.cpp"
-std::vector<int> queue;
+std::vector<long> queue;
 struct {
 	int m, i;
 } pIdx[MAXNBITS];
-bool checked[1<<MAXNBITS];
-bool setIsShort(int comp, int nBit)
+std::unordered_set<long> checked;
+bool setIsShort(long comp, int nBit)
 {
 	for (int j=0; j<nBit; j++) {
 		int m = pIdx[j].m;
 		int i = pIdx[j].i;
-		paths[m].isShort[i] = comp & (1<<j);
+		paths[m].isShort[i] = comp & (1L<<j);
 	}
 	for (int m=0; m<k; m++) {
 		bool hasAShort = false;
@@ -212,6 +215,7 @@ void check_possible_settings(sparsegraph * sg, int nBit)
 	if (isFeasible()) {
 			printf("find one! graph %d (e=%d).\n", count, sg->nde/2);
 			printNetwork(); nTarget++;
+			return;
 	}
 	int l=0;
 	for (int m=0; m<k; m++)
@@ -220,16 +224,15 @@ void check_possible_settings(sparsegraph * sg, int nBit)
 		}
 	assert(l == nBit);
 	queue.clear();
-	queue.push_back((1<<nBit)-1); //queue stores the infeasible && cannot be proved case
-	for (int j=0; j<(1<<nBit); j++) checked[j] = false;
-	checked[(1<<nBit)-1] = true;
+	queue.push_back((1L<<nBit)-1); //queue stores the infeasible && cannot be proved case
+	checked.clear();
 	int head = 0;
 	while (head < queue.size()) {
-		int comp = queue[head++];
-		for (int j=0; j<nBit; j++) if (comp & (1<<j)) {
-			int ncomp = comp ^ (1<<j);
-			if (checked[ncomp]) continue;
-			checked[ncomp] = true;
+		long comp = queue[head++];
+		for (int j=0; j<nBit; j++) if (comp & (1L<<j)) {
+			long ncomp = comp ^ (1L<<j);
+			if (checked.find(ncomp) != checked.end()) continue;
+			checked.insert(ncomp);
 			if (!setIsShort(ncomp, nBit)) continue;
 			if (!no_orth_cut(sg)) continue;
 			if (!no_merger(sg)) continue;
